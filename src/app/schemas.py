@@ -1,12 +1,34 @@
-from pydantic import BaseModel, Field, EmailStr, constr
+from datetime import datetime
+from pydantic import BaseModel, EmailStr, Field, constr
 
-PasswordStr = constr(min_length=8, max_length=128)
 
-class UserCreate(BaseModel):
-    username: constr(min_length=3, max_length=30, regex=r'^[a-zA-Z0-9_.-]+$') = Field(..., description="Alfanumérico, guiones, underscore")
+class UserBase(BaseModel):
     email: EmailStr
-    password: PasswordStr
+    full_name: constr(
+        min_length=1,
+        max_length=50,
+        pattern=r"^[^<>]*$"  # Previene < y > para mitigar XSS básico
+    ) = Field(..., description="Nombre sin caracteres < o >")
 
-class UserLogin(BaseModel):
-    username_or_email: str = Field(..., description="username o email")
-    password: str = Field(..., min_length=1)
+
+class UserCreate(UserBase):
+    password: constr(min_length=8)
+
+
+class UserInDB(UserBase):
+    hashed_password: str
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class TokenData(BaseModel):
+    sub: EmailStr
+    exp: datetime | None = None
