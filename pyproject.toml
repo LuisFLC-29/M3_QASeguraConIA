@@ -1,0 +1,62 @@
+[project]
+name = "auth-secure-app"
+version = "0.1.0"
+description = "Auth Challenge - Secure FastAPI app with tests and CI"
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+  "fastapi>=0.95.0",
+  "uvicorn[standard]>=0.20.0",
+  "pydantic>=2.2.0",
+  "passlib[bcrypt]>=1.7.4",
+  "pyjwt>=2.8.0",
+  "python-dotenv>=1.0.0",
+  "slowapi>=0.1.6"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.2.0",
+  "pytest-asyncio>=0.20.0",
+  "httpx>=0.24.0",
+  "coverage>=7.0.0",
+  "bandit>=1.7.0",
+  "ruff>=0.19.0",
+  "black>=24.0.0",
+  "safety>=2.1.0",
+  "pip-audit>=2.0.0"
+]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "B", "S"]
+ignore = ["E203", "W503"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.bandit]
+targets = ["src/app"]
+exclude = ["src/tests", "venv"]
+
+[tool.coverage.run]
+branch = true
+source = ["src/app"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+skip_covered = false
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-q --maxfail=1"
+testpaths = [
+  "src/tests"
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
