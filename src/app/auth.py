@@ -1,64 +1,79 @@
-import time
-from typing import Optional, Dict
+from datetime import datetime, timedelta, timezone
+from typing import Dict, Optional
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
 from passlib.context import CryptContext
-import jwt
-from datetime import datetime, timedelta
-from .schemas import UserCreate
+
+from .schemas import UserCreate, UserInDB, TokenData, UserBase
+
+# Clave de ejemplo SOLO para entorno educativo: cámbiala en tu repo real
+SECRET_KEY = "CHANGE_THIS_SECRET_KEY_USE_ENV_VAR_IN_REAL_PROJECTS"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-JWT_SECRET = "CHANGE_THIS_SECRET_TO_ENV"  # usa env var en CI/prod
-JWT_ALGO = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-# Simulated user table (replace with DB)
-_users: Dict[str, Dict] = {}
+# "Base de datos" en memoria solo para demo
+_fake_users_db: Dict[str, UserInDB] = {}
 
-def hash_password(password: str) -> str:
+
+def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
 
-def create_user(user: UserCreate) -> Dict:
-    if user.username in _users or any(u["email"] == user.email for u in _users.values()):
-        raise ValueError("Usuario o email ya existe")
-    hashed = hash_password(user.password)
-    user_record = {
-        "username": user.username,
-        "email": user.email,
-        "password_hash": hashed,
-        "created_at": time.time()
-    }
-    _users[user.username] = user_record
-    return user_record
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
-def authenticate(username_or_email: str, password: str) -> Optional[Dict]:
-    # buscar por username o email
-    user = None
-    if username_or_email in _users:
-        user = _users[username_or_email]
-    else:
-        for u in _users.values():
-            if u["email"] == username_or_email:
-                user = u
-                break
+
+def create_user(user_in: UserCreate) -> UserBase:
+    if user_in.email in _fake_users_db:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User already exists",
+        )
+    hashed = get_password_hash(user_in.password)
+    user_db = UserInDB(email=user_in.email, full_name=user_in.full_name, hashed_password=hashed)
+    _fake_users_db[user_in.email] = user_db
+    return UserBase(email=user_db.email, full_name=user_db.full_name)
+
+
+def authenticate_user(email: str, password: str) -> Optional[UserInDB]:
+    user = _fake_users_db.get(email)
     if not user:
         return None
-    if not verify_password(password, user["password_hash"]):
+    if not verify_password(password, user.hashed_password):
         return None
     return user
 
-def create_access_token(subject: str, expires_minutes: int = ACCESS_TOKEN_EXPIRE_MINUTES) -> str:
-    expire = datetime.utcnow() + timedelta(minutes=expires_minutes)
-    to_encode = {"sub": subject, "exp": expire}
-    token = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGO)
-    return token
 
-def decode_token(token: str) -> Optional[Dict]:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserBase:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
-        return payload
-    except jwt.ExpiredSignatureError:
-        return None
-    except jwt.PyJWTError:
-        return None
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        sub: str = payload.get("sub")
+        if sub is None:
+            raise credentials_exception
+        token_data = TokenData(sub=sub)
+    except JWTError:
+        raise credentials_exception
+
+    user = _fake_users_db.get(token_data.sub)
+    if user is None:
+        raise credentials_exception
+
+    return UserBase(email=user.email, full_name=user.full_name)
