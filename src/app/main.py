@@ -1,31 +1,80 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
+from datetime import timedelta
+
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse
-from slowapi.errors import RateLimitExceeded
-from .schemas import UserCreate, UserLogin
-from .auth import create_user, authenticate, create_access_token
-from .deps import limiter
+from fastapi.security import OAuth2PasswordRequestForm
 
-app = FastAPI(title="Auth Challenge")
+from .auth import (
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    authenticate_user,
+    create_access_token,
+    create_user,
+    get_current_user,
+)
+from .rate_limit import login_rate_limiter
+from .schemas import LoginRequest, Token, UserBase, UserCreate
 
-# Register rate limit handler
-@app.exception_handler(RateLimitExceeded)
-def rate_limit_handler(request: Request, exc: RateLimitExceeded):
-    return JSONResponse(status_code=429, content={"detail": "Too many requests"})
+app = FastAPI(title="Auth API Secure IA")
 
-@app.post("/register")
-@limiter.limit("5/minute")
-async def register(user: UserCreate):
-    try:
-        rec = create_user(user)
-        return {"username": rec["username"], "email": rec["email"]}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/login")
-@limiter.limit("10/minute")
-async def login(payload: UserLogin):
-    user = authenticate(payload.username_or_email, payload.password)
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.post("/auth/register", response_model=UserBase, status_code=status.HTTP_201_CREATED)
+def register(user_in: UserCreate):
+    """
+    Registro de usuario con validación de schema y hash de contraseña.
+    """
+    return create_user(user_in)
+
+
+@app.post("/auth/login", response_model=Token, dependencies=[Depends(login_rate_limiter)])
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    """
+    Login con OAuth2PasswordRequestForm (username = email).
+    Rate limiting aplicado a este endpoint.
+    """
+    user = authenticate_user(form_data.username, form_data.password)
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_access_token(user["username"])
-    return {"access_token": token, "token_type": "bearer"}
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(data={"sub": user.email}, expires_delta=access_token_expires)
+    return Token(access_token=access_token)
+
+
+@app.post("/auth/login-json", response_model=Token, dependencies=[Depends(login_rate_limiter)])
+def login_json(payload: LoginRequest):
+    """
+    Variante JSON del login usada en pruebas de seguridad (SQLi, XSS, etc.).
+    """
+    user = authenticate_user(payload.email, payload.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(data={"sub": user.email}, expires_delta=access_token_expires)
+    return Token(access_token=access_token)
+
+
+@app.get("/users/me", response_model=UserBase)
+async def read_users_me(current_user: UserBase = Depends(get_current_user)):
+    """
+    Endpoint protegido que usa JWT.
+    """
+    return current_user
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(_, exc: Exception):
+    # handler simple para evitar filtrar trazas en respuestas
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
