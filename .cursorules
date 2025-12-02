@@ -1,12 +1,26 @@
-# .cursorrules
-# - Prohibir secrets en prompts
-# - Requerir "security_review: true" en prompts que generen code
-rules:
-  - id: no-secrets
-    description: "Never include API keys, tokens, or secrets in prompts or responses"
-    pattern: "key|secret|token|passwd"
-    action: redact
-  - id: require-security-tag
-    description: "All code-generation prompts must include 'security_review: true'"
-    pattern: "code generation"
-    action: require_prompt_field
+{
+  "$schema": "https://www.cursor.so/schemas/v1/cursorrules.json",
+  "description": "Reglas de seguridad para asistencia de IA en proyecto de autenticación.",
+  "require_reasoning": "off",
+  "rules": [
+    {
+      "pattern": "**/*.py",
+      "explanation": "Reglas generales de seguridad para código Python.",
+      "only_allow_rules": [
+        "No sugerir credenciales, secretos ni claves JWT hardcodeadas reales. Usar variables de entorno.",
+        "No deshabilitar validaciones de entrada ni comprobaciones de autenticación.",
+        "Preferir algoritmos de hash seguros (bcrypt, argon2) para contraseñas.",
+        "No sugerir la desactivación de tests de seguridad, análisis estático ni coverage gates.",
+        "Al generar nuevas rutas, incluir siempre validación Pydantic y pruebas básicas."
+      ]
+    },
+    {
+      "pattern": "tests/**/*.py",
+      "explanation": "Reglas para pruebas generadas por IA.",
+      "only_allow_rules": [
+        "Las pruebas deben cubrir casos felices y casos de error.",
+        "Agregar siempre al menos una prueba negativa relacionada con seguridad (XSS/SQLi/autenticación)."
+      ]
+    }
+  ]
+}
