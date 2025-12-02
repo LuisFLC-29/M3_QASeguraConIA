@@ -1,0 +1,12 @@
+# .cursorrules
+# - Prohibir secrets en prompts
+# - Requerir "security_review: true" en prompts que generen code
+rules:
+  - id: no-secrets
+    description: "Never include API keys, tokens, or secrets in prompts or responses"
+    pattern: "key|secret|token|passwd"
+    action: redact
+  - id: require-security-tag
+    description: "All code-generation prompts must include 'security_review: true'"
+    pattern: "code generation"
+    action: require_prompt_field
