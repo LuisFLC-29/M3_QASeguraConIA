@@ -21,10 +21,17 @@ _fake_users_db: Dict[str, UserInDB] = {}
 
 
 def get_password_hash(password: str) -> str:
+    # bcrypt only supports passwords up to 72 bytes
+    if isinstance(password, str):
+        password = password.encode("utf-8")
+    password = password[:72]  # SAFE TRUNCATION recommended by Passlib
     return pwd_context.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if isinstance(plain_password, str):
+        plain_password = plain_password.encode("utf-8")
+    plain_password = plain_password[:72]
     return pwd_context.verify(plain_password, hashed_password)
 
 
