@@ -13,7 +13,7 @@ SECRET_KEY = "CHANGE_THIS_SECRET_KEY_USE_ENV_VAR_IN_REAL_PROJECTS"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 # "Base de datos" en memoria solo para demo
@@ -21,17 +21,10 @@ _fake_users_db: Dict[str, UserInDB] = {}
 
 
 def get_password_hash(password: str) -> str:
-    # bcrypt only supports passwords up to 72 bytes
-    if isinstance(password, str):
-        password = password.encode("utf-8")
-    password = password[:72]  # SAFE TRUNCATION recommended by Passlib
     return pwd_context.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    if isinstance(plain_password, str):
-        plain_password = plain_password.encode("utf-8")
-    plain_password = plain_password[:72]
     return pwd_context.verify(plain_password, hashed_password)
 
 
