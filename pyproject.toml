@@ -8,10 +8,11 @@ version = "0.1.0"
 description = "Módulo de autenticación seguro con FastAPI, pruebas automatizadas y CI/CD con gates de seguridad."
 requires-python = ">=3.11"
 dependencies = [
+  "argon2-cffi>=23.1.0",
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.30.0",
   "python-jose[cryptography]>=3.3.0",
-  "passlib[bcrypt]>=1.7.4",
+  "passlib[argon2]>=1.7.4",
   "pydantic[email]>=2.7.0",
   "httpx>=0.27.0",
   "python-multipart>=0.0.9"
